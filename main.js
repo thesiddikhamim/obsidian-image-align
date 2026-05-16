@@ -56,6 +56,7 @@ class ImageAlignerPlugin extends Plugin {
     // ── Lifecycle ─────────────────────────────────────────────
     async onload() {
         await this._loadData();
+        this._migrateData();
 
         // ① Dynamic <style> for alignment — rebuilt from saved data on every
         //    load, so it is present even during PDF export (Obsidian re-runs
@@ -79,7 +80,7 @@ class ImageAlignerPlugin extends Plugin {
             this.app.workspace.on('active-leaf-change', () => this._initAllLeaves())
         );
 
-        console.log('[Image Aligner] v2 loaded');
+        console.log('[Image Aligner] v2.1 loaded');
     }
 
     onunload() {
@@ -101,28 +102,113 @@ class ImageAlignerPlugin extends Plugin {
     }
     async _saveData() { await this.saveData(this.data); }
 
+    // Aggressively migrate old keys to the new stable format.
+    _migrateData() {
+        let changed = false;
+        const clean = {};
+        for (let [src, align] of Object.entries(this.data.alignments)) {
+            let newKey = src;
+            
+            // 1. Convert app:// or file:// URLs to simple link keys (best effort)
+            if (src.startsWith('app://') || src.startsWith('file://')) {
+                try {
+                    const url = new URL(src);
+                    const pathParts = url.pathname.split('/');
+                    const filename = pathParts.pop();
+                    if (filename) {
+                        newKey = 'link:' + decodeURIComponent(filename);
+                        changed = true;
+                    }
+                } catch (e) {
+                    // Fallback for non-standard URLs
+                    const parts = src.split('?')[0].split('/');
+                    const filename = parts.pop();
+                    if (filename) {
+                        newKey = 'link:' + decodeURIComponent(filename);
+                        changed = true;
+                    }
+                }
+            } 
+            // 2. Wrap existing raw filenames in 'link:' prefix
+            else if (!src.startsWith('link:') && !src.startsWith('file:') && !src.startsWith('http')) {
+                newKey = 'link:' + src;
+                changed = true;
+            }
+
+            // 3. Strip any remaining query params
+            if (newKey.includes('?')) {
+                newKey = newKey.split('?')[0];
+                changed = true;
+            }
+            
+            clean[newKey] = align;
+        }
+        if (changed) {
+            this.data.alignments = clean;
+            this._saveData();
+        }
+    }
+
     // ── Stable image key ──────────────────────────────────────
-    // External URLs  → the literal URL string
-    // Internal imgs  → Obsidian's app:// resource path
-    // Both are consistent within a session and across sessions for the
-    // same vault location.
-    _key(img) { return img.getAttribute('src') || ''; }
+    // We prioritize the internal link path (e.g., "image.png") over the
+    // volatile app:// resource path. This ensures persistence across restarts.
+    _key(img) {
+        // 1. Internal Link (Wiki-link ![[...]] or Markdown link)
+        const embed = img.closest('.internal-embed');
+        if (embed) {
+            let src = embed.getAttribute('src');
+            if (src) {
+                // Strip size/alt: "image.png|400" -> "image.png"
+                if (src.includes('|')) src = src.split('|')[0];
+                return 'link:' + src;
+            }
+        }
+
+        // 2. Reading Mode data-path attribute
+        const path = img.getAttribute('data-path');
+        if (path) return 'link:' + path;
+
+        // 3. External URL or fallback
+        let src = img.getAttribute('src') || '';
+        if (src.includes('?')) src = src.split('?')[0];
+        
+        // If it's a web URL, return as is. If app://, we've already failed to find a better key.
+        return src;
+    }
 
     // ── Dynamic CSS ───────────────────────────────────────────
-    // One rule per aligned image, keyed by src attribute value.
-    // Using `display:block` + `margin` shifts any sized image (|400 etc.)
-    // left / centre / right.  No parent prefix — the src selector is
-    // specific enough and this makes the rule apply to LP, Reading, and PDF.
+    // Multi-layered selectors to ensure alignment works in all modes.
     _rebuildCSS() {
         if (!this.styleEl) return;
         const lines = [];
 
-        for (const [src, align] of Object.entries(this.data.alignments)) {
-            if (!MARGIN[align]) continue;
-            const safe = src.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            lines.push(
-                `img[src="${safe}"] { display:block !important; margin:${MARGIN[align]} !important; }`
-            );
+        for (const [key, align] of Object.entries(this.data.alignments)) {
+            const marginValue = MARGIN[align];
+            const textAlign   = align === 'center' ? 'center' : (align === 'right' ? 'right' : 'left');
+
+            if (key.startsWith('link:')) {
+                const path = key.substring(5);
+                const safePath = path.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                const filename = path.split('/').pop().replace(/"/g, '\\"');
+
+                // A. Target the internal-embed container (Reading & LP)
+                // We use ^= to handle "image.png|400" cases
+                lines.push(`.internal-embed[src^="${safePath}"] { display: block !important; text-align: ${textAlign} !important; margin: ${marginValue} !important; }`);
+                lines.push(`.internal-embed[src^="${safePath}"] img { display: block !important; margin: ${marginValue} !important; }`);
+                
+                // B. Target by data-path (Reading Mode)
+                lines.push(`img[data-path="${safePath}"] { display: block !important; margin: ${marginValue} !important; }`);
+
+                // C. Target by partial src match (Live Preview robust fallback)
+                // This catches the app://.../filename.png URLs in the editor
+                lines.push(`.markdown-source-view.mod-cm6 .cm-content img[src*="${filename}"] { display: block !important; margin: ${marginValue} !important; }`);
+                lines.push(`.markdown-source-view.mod-cm6 .cm-content img[alt="${filename}"] { display: block !important; margin: ${marginValue} !important; }`);
+            } else {
+                // External URLs
+                const safe = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                lines.push(`img[src^="${safe}"] { display: block !important; margin: ${marginValue} !important; }`);
+                lines.push(`img[src*="${safe}"] { display: block !important; margin: ${marginValue} !important; }`);
+            }
         }
 
         // Keep the floating panel out of any print / PDF output
