@@ -178,6 +178,7 @@ class ImageAlignerPlugin extends Plugin {
 
     // ── Dynamic CSS ───────────────────────────────────────────
     // Multi-layered selectors to ensure alignment works in all modes.
+    // We use extremely aggressive selectors to override Obsidian's defaults and theme styles.
     _rebuildCSS() {
         if (!this.styleEl) return;
         const lines = [];
@@ -186,29 +187,41 @@ class ImageAlignerPlugin extends Plugin {
             const marginValue = MARGIN[align];
             const textAlign   = align === 'center' ? 'center' : (align === 'right' ? 'right' : 'left');
 
-            if (key.startsWith('link:')) {
-                const path = key.substring(5);
-                const safePath = path.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                const filename = path.split('/').pop().replace(/"/g, '\\"');
+            // Get the base filename to use as a robust wildcard matcher
+            let filename = key;
+            if (key.startsWith('link:')) filename = key.substring(5);
+            filename = filename.split('/').pop().split('?')[0]; // Final filename
+            const safeFile = filename.replace(/"/g, '\\"');
 
-                // A. Target the internal-embed container (Reading & LP)
-                // We use ^= to handle "image.png|400" cases
-                lines.push(`.internal-embed[src^="${safePath}"] { display: block !important; text-align: ${textAlign} !important; margin: ${marginValue} !important; }`);
-                lines.push(`.internal-embed[src^="${safePath}"] img { display: block !important; margin: ${marginValue} !important; }`);
-                
-                // B. Target by data-path (Reading Mode)
-                lines.push(`img[data-path="${safePath}"] { display: block !important; margin: ${marginValue} !important; }`);
+            // 1. Target the Wrapper/Container (Crucial for Live Preview)
+            // Obsidian wraps images in .internal-embed or .image-embed. 
+            // We target these containers to force the layout.
+            const containerSelectors = [
+                `.internal-embed[src*="${safeFile}"]`,
+                `.image-embed[src*="${safeFile}"]`,
+                `.internal-embed:has(img[src*="${safeFile}"])`,
+                `.image-embed:has(img[src*="${safeFile}"])`
+            ];
 
-                // C. Target by partial src match (Live Preview robust fallback)
-                // This catches the app://.../filename.png URLs in the editor
-                lines.push(`.markdown-source-view.mod-cm6 .cm-content img[src*="${filename}"] { display: block !important; margin: ${marginValue} !important; }`);
-                lines.push(`.markdown-source-view.mod-cm6 .cm-content img[alt="${filename}"] { display: block !important; margin: ${marginValue} !important; }`);
-            } else {
-                // External URLs
-                const safe = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                lines.push(`img[src^="${safe}"] { display: block !important; margin: ${marginValue} !important; }`);
-                lines.push(`img[src*="${safe}"] { display: block !important; margin: ${marginValue} !important; }`);
-            }
+            containerSelectors.forEach(sel => {
+                lines.push(`${sel} { display: block !important; margin: ${marginValue} !important; text-align: ${textAlign} !important; width: 100%; }`);
+            });
+
+            // 2. Target the Image itself (Reading Mode & LP Fallback)
+            const imgSelectors = [
+                `img[src*="${safeFile}"]`,
+                `img[alt*="${safeFile}"]`,
+                `img[data-path*="${safeFile}"]`,
+                `.markdown-source-view.mod-cm6 .cm-content img[src*="${safeFile}"]`,
+                `.markdown-source-view.mod-cm6 .cm-content img[alt*="${safeFile}"]`
+            ];
+
+            imgSelectors.forEach(sel => {
+                lines.push(`${sel} { display: block !important; margin: ${marginValue} !important; max-width: 100%; }`);
+            });
+            
+            // 3. Specific fix for Live Preview "block" embeds
+            lines.push(`.markdown-source-view.mod-cm6 .cm-content .internal-embed[src*="${safeFile}"] { display: flex !important; justify-content: ${align === 'center' ? 'center' : (align === 'right' ? 'flex-end' : 'flex-start')} !important; }`);
         }
 
         // Keep the floating panel out of any print / PDF output
