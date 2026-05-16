@@ -1,0 +1,10 @@
+{
+  "id": "image-aligner",
+  "name": "Image Aligner",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Align images left, center, or right in Reading View. Hover an image for controls. Works with URL images and preserves alignment in PDF export.",
+  "author": "Custom Plugin",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}

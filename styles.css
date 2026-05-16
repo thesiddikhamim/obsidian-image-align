@@ -1,0 +1,117 @@
+/* ================================================================
+   Image Aligner v2 — styles.css
+
+   Alignment visuals are handled by the dynamic <style> element
+   injected by main.js (img[src="..."] rules), which works in
+   Live Preview, Reading mode, and PDF export.
+
+   This file covers:
+     • The floating hover panel (Live Preview only)
+     • The .ia-host wrapper classes (print fallback)
+     • @media print rules
+   ================================================================ */
+
+
+/* ── Floating alignment panel ───────────────────────────────── */
+/* Sits in document.body with position:fixed so it is always
+   at the image's top-right regardless of scroll or layout.   */
+.ia-float-panel {
+    position: fixed;
+    z-index: 9999;
+
+    /* Layout */
+    display: flex;          /* toggled to 'none' by JS when hidden */
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+
+    /* Visuals */
+    background: rgba(12, 12, 12, 0.74);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 9px;
+    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.38), 0 1px 3px rgba(0,0,0,0.2);
+
+    /* Prevent panel from interfering with editor events */
+    pointer-events: auto;
+
+    /* Subtle entrance animation */
+    animation: ia-fadein 0.14s ease;
+}
+
+@keyframes ia-fadein {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ── Alignment buttons inside the panel ──────────────────────── */
+.ia-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin: 0;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    line-height: 0;
+
+    color: rgba(255, 255, 255, 0.80);
+    transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+
+.ia-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Active / currently-applied alignment */
+.ia-btn.ia-on {
+    background: rgba(96, 165, 250, 0.20);
+    color: #93c5fd;
+    border-color: rgba(96, 165, 250, 0.38);
+}
+
+.ia-btn.ia-on:hover {
+    background: rgba(96, 165, 250, 0.30);
+    color: #bfdbfe;
+}
+
+
+/* ── Reading mode wrapper (added by post-processor) ─────────── */
+/* The dynamic CSS in main.js handles the actual visual alignment.
+   These classes are here as a structural hook for print rules.   */
+.ia-host {
+    display: block;
+}
+
+
+/* ================================================================
+   PRINT / PDF EXPORT
+   ================================================================
+   Primary alignment is handled by the dynamic img[src="..."] rules
+   in main.js which are present during PDF export.
+
+   These class-based rules are a belt-and-suspenders fallback for
+   environments where the dynamic <style> might not be available.
+   ================================================================ */
+@media print {
+    /* Never show the floating panel in PDFs */
+    .ia-float-panel {
+        display: none !important;
+    }
+
+    /* Class-based fallback for reading-mode wrappers */
+    .ia-host.ia-left   img { display: block !important; margin: 0 auto 0 0    !important; }
+    .ia-host.ia-center img { display: block !important; margin: 0 auto        !important; }
+    .ia-host.ia-right  img { display: block !important; margin: 0 0   0 auto  !important; }
+}
