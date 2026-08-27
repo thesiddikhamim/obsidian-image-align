@@ -1,18 +1,18 @@
 'use strict';
 
 /* ============================================================
-   Image Aligner — Obsidian Plugin v2.3
+   Image Align & Caption — Obsidian Plugin v3.0
    ─────────────────────────────────────────────────────────
-   • Active-Page Scoped Dynamic CSS: Generates CSS ONLY for
-     images in currently active notes (zero bloat from 10k vault images).
-   • Permanent styling: All images on active note are aligned
-     automatically without needing to hover.
-   • Resizing support: Preserves |300, |200x100 and drag handles.
-   • 1-Click floating toolbar at image top-left (Live Preview).
+   • Active-Page Scoped Dynamic CSS (zero memory/CSS bloat).
+   • Unified Image Alignment (Left, Center, Right) & Captioning.
+   • Synchronized Vertical Layout (Column Flex) prevents captions
+     from floating awkwardly to the top-right.
+   • Preserves native resizing (|300, |200x100) and drag handles.
+   • 1-Click floating toolbar at image top-left in Live Preview.
    • 100% reliable PDF export support via Markdown Post-Processor.
    ============================================================ */
 
-const { Plugin, MarkdownView } = require('obsidian');
+const { Plugin, MarkdownView, PluginSettingTab, Setting } = require('obsidian');
 
 // ── SVG Icons ────────────────────────────────────────────────
 const ICONS = {
@@ -44,6 +44,14 @@ const ICONS = {
 
 const DIRS = ['left', 'center', 'right'];
 
+const DEFAULT_SETTINGS = {
+    alignments: {},
+    enableCaptions: true,
+    showFileNameAsCaption: false,
+    captionAlign: 'match-image', // 'match-image' | 'left' | 'center' | 'right'
+    captionStyle: 'italic',       // 'italic' | 'normal'
+};
+
 function escapeCSS(str) {
     if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
         return CSS.escape(str);
@@ -51,14 +59,85 @@ function escapeCSS(str) {
     return str.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
 }
 
-class ImageAlignerPlugin extends Plugin {
+/**
+ * Parses caption text from alt metadata, safely filtering out dimension tokens (|300, |200x100).
+ */
+function parseCaption(altText, showFileName, srcText) {
+    const getCleanFileName = (src) => {
+        if (!src) return null;
+        const fileName = src.split('/').pop() || src;
+        try {
+            return decodeURIComponent(fileName.split('?')[0]);
+        } catch (_) {
+            return fileName.split('?')[0];
+        }
+    };
 
-    data         = { alignments: {} }; // { [key]: 'left'|'center'|'right' }
+    if (!altText || altText.trim() === '') {
+        if (showFileName && srcText) {
+            return getCleanFileName(srcText);
+        }
+        return null;
+    }
+
+    const parts = altText.split('|');
+    const sizeRegex = /^\d+(x\d+)?$/;
+
+    if (parts.length > 0) {
+        const lastPart = parts[parts.length - 1].trim();
+        if (sizeRegex.test(lastPart)) {
+            parts.pop();
+        }
+    }
+
+    let caption = parts.join('|').trim();
+
+    if (caption === '') {
+        if (showFileName && srcText) {
+            return getCleanFileName(srcText);
+        }
+        return null;
+    }
+
+    // Strip wrapping quotes if user formatted as !["Caption"|300](...)
+    if ((caption.startsWith('"') && caption.endsWith('"')) || (caption.startsWith("'") && caption.endsWith("'"))) {
+        if (caption.length >= 2) {
+            caption = caption.substring(1, caption.length - 1).trim();
+        }
+    }
+
+    if (!showFileName) {
+        const cleanSrcName = getCleanFileName(srcText);
+        if (cleanSrcName && cleanSrcName === caption) {
+            return null;
+        }
+
+        const lowerCaption = caption.toLowerCase();
+        if (
+            lowerCaption.endsWith('.png') ||
+            lowerCaption.endsWith('.jpg') ||
+            lowerCaption.endsWith('.jpeg') ||
+            lowerCaption.endsWith('.gif') ||
+            lowerCaption.endsWith('.webp') ||
+            lowerCaption.endsWith('.svg') ||
+            lowerCaption.endsWith('.bmp')
+        ) {
+            return null;
+        }
+    }
+
+    return caption || null;
+}
+
+class ImageAlignCaptionPlugin extends Plugin {
+
+    settings     = Object.assign({}, DEFAULT_SETTINGS);
     styleEl      = null;               // <style id="ia-dynamic"> for active-page CSS
     panel        = null;               // Single shared floating toolbar
     activeImg    = null;               // Currently hovered <img>
     hideTimer    = null;               // Panel hide timer
     rebuildTimer = null;               // Debounce timer for active note CSS rebuild
+    lpObserver   = null;               // Mutation observer for Live Preview captions
 
     // ── Lifecycle ─────────────────────────────────────────────
     async onload() {
@@ -84,16 +163,32 @@ class ImageAlignerPlugin extends Plugin {
         this.registerDomEvent(window,   'resize',    () => this._onResize(), { passive: true });
 
         // ⑤ Active page change listeners — rebuilds CSS strictly for open notes
-        this.registerEvent(this.app.workspace.on('active-leaf-change', () => this._debouncedRebuild()));
-        this.registerEvent(this.app.workspace.on('layout-change',      () => this._debouncedRebuild()));
-        this.registerEvent(this.app.workspace.on('editor-change',      () => this._debouncedRebuild()));
+        this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
+            this._debouncedRebuild();
+            this._scanActiveLeavesLPCaptions();
+        }));
+        this.registerEvent(this.app.workspace.on('layout-change', () => {
+            this._debouncedRebuild();
+            this._scanActiveLeavesLPCaptions();
+        }));
+        this.registerEvent(this.app.workspace.on('editor-change', () => {
+            this._debouncedRebuild();
+            this._scanActiveLeavesLPCaptions();
+        }));
 
-        console.log('[Image Aligner] v2.3 loaded (Active-Page Scoped)');
+        // ⑥ Live Preview DOM Mutation Observer for asynchronous images & folds
+        this._initLPObserver();
+
+        // ⑦ Settings Tab
+        this.addSettingTab(new ImageAlignCaptionSettingTab(this.app, this));
+
+        console.log('[Image Align & Caption] v3.0 loaded');
     }
 
     onunload() {
         if (this.hideTimer) clearTimeout(this.hideTimer);
         if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
+        if (this.lpObserver) this.lpObserver.disconnect();
 
         this.styleEl?.remove();
         this.panel?.remove();
@@ -101,30 +196,33 @@ class ImageAlignerPlugin extends Plugin {
         this.activeImg = null;
 
         document.querySelectorAll('.ia-float-panel').forEach(el => el.remove());
+        document.querySelectorAll('.ia-caption, .image-caption').forEach(el => el.remove());
     }
 
     _debouncedRebuild() {
         if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
         this.rebuildTimer = setTimeout(() => {
             this._rebuildCSS();
-        }, 120);
+        }, 100);
     }
 
     // ── Persistence ───────────────────────────────────────────
     async _loadData() {
         const saved = await this.loadData();
-        this.data = Object.assign({ alignments: {} }, saved);
-        if (!this.data.alignments) this.data.alignments = {};
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+        if (!this.settings.alignments) {
+            this.settings.alignments = {};
+        }
     }
 
     async _saveData() {
-        await this.saveData(this.data);
+        await this.saveData(this.settings);
     }
 
     _migrateData() {
         let changed = false;
         const clean = {};
-        for (let [src, align] of Object.entries(this.data.alignments)) {
+        for (let [src, align] of Object.entries(this.settings.alignments || {})) {
             let newKey = src;
 
             if (src.startsWith('app://') || src.startsWith('file://')) {
@@ -163,7 +261,7 @@ class ImageAlignerPlugin extends Plugin {
         }
 
         if (changed) {
-            this.data.alignments = clean;
+            this.settings.alignments = clean;
             this._saveData();
         }
     }
@@ -217,7 +315,7 @@ class ImageAlignerPlugin extends Plugin {
             try {
                 const text = leaf.view.editor ? leaf.view.editor.getValue() : '';
                 if (text) {
-                    // Wiki links: ![[image.png|300]]
+                    // Wiki links: ![[image.png|Caption|300]]
                     const wikiRegex = /!\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
                     let match;
                     while ((match = wikiRegex.exec(text)) !== null) {
@@ -229,7 +327,7 @@ class ImageAlignerPlugin extends Plugin {
                         }
                     }
 
-                    // Markdown links: ![alt](url)
+                    // Markdown links: ![Caption|436](url)
                     const mdRegex = /!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
                     while ((match = mdRegex.exec(text)) !== null) {
                         let rawUrl = match[1].trim();
@@ -270,7 +368,7 @@ class ImageAlignerPlugin extends Plugin {
         const lines = [];
 
         // Build CSS rules ONLY for images currently present on the active note(s)
-        for (const [key, align] of Object.entries(this.data.alignments)) {
+        for (const [key, align] of Object.entries(this.settings.alignments || {})) {
             if (!DIRS.includes(align)) continue;
 
             // Check if key belongs to an active image in the open note
@@ -290,7 +388,6 @@ class ImageAlignerPlugin extends Plugin {
                 }
             }
 
-            // Skip generating CSS for images not in the active note(s)
             if (!isRelevant) continue;
 
             const isLink = key.startsWith('link:');
@@ -302,29 +399,35 @@ class ImageAlignerPlugin extends Plugin {
             const encFile = escapeCSS(encodeURIComponent(filename));
 
             const justifyVal = align === 'center' ? 'center' : (align === 'right' ? 'flex-end' : 'flex-start');
+            const alignItemVal = align === 'center' ? 'center' : (align === 'right' ? 'flex-end' : 'flex-start');
             const textAlign  = align === 'center' ? 'center' : (align === 'right' ? 'right' : 'left');
 
             if (isLink) {
-                // Line & paragraph containers
+                // Line & paragraph containers in Live Preview and Reading Mode
                 lines.push(`
 .markdown-source-view.mod-cm6 .cm-embed-block:has(.internal-embed[src*="${safeFile}"]),
 .markdown-source-view.mod-cm6 .cm-embed-block:has(.image-embed[src*="${safeFile}"]),
 .markdown-source-view.mod-cm6 .cm-line:has(.internal-embed[src*="${safeFile}"]),
+.markdown-source-view.mod-cm6 .cm-line:has(.image-embed[src*="${safeFile}"]),
 .markdown-rendered p:has(.internal-embed[src*="${safeFile}"]),
 .markdown-rendered p:has(img[data-path*="${safeFile}"]),
 .markdown-rendered p:has(img[src*="${safeFile}"]) {
     display: flex !important;
+    flex-direction: column !important;
+    align-items: ${alignItemVal} !important;
     justify-content: ${justifyVal} !important;
     text-align: ${textAlign} !important;
 }`);
 
-                // Embed wrapper (inline-flex, preserves resizing |300)
+                // Embed wrapper (inline-flex column, keeps image and caption stacked vertically)
                 lines.push(`
 .internal-embed[src*="${safeFile}"],
 .image-embed[src*="${safeFile}"],
 .internal-embed[src^="${safeRaw}|"],
 .internal-embed[src="${safeRaw}"] {
     display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: ${alignItemVal} !important;
     justify-content: ${justifyVal} !important;
     margin-left: ${align === 'left' ? '0' : 'auto'} !important;
     margin-right: ${align === 'right' ? '0' : 'auto'} !important;
@@ -346,7 +449,7 @@ img[data-path*="${safeFile}"],
     max-width: 100% !important;
 }`);
             } else {
-                // External web image
+                // External web image (supports query parameters)
                 const safeKey = escapeCSS(rawPath);
                 lines.push(`
 .markdown-source-view.mod-cm6 .cm-embed-block:has(img[src^="${safeKey}"]),
@@ -358,12 +461,16 @@ img[data-path*="${safeFile}"],
 .markdown-rendered p:has(img[src^="${safeKey}"]),
 .markdown-rendered p:has(img[src*="${safeKey}"]) {
     display: flex !important;
+    flex-direction: column !important;
+    align-items: ${alignItemVal} !important;
     justify-content: ${justifyVal} !important;
     text-align: ${textAlign} !important;
 }
 .image-embed[src^="${safeKey}"],
 .image-embed:has(img[src^="${safeKey}"]) {
     display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: ${alignItemVal} !important;
     justify-content: ${justifyVal} !important;
     margin-left: ${align === 'left' ? '0' : 'auto'} !important;
     margin-right: ${align === 'right' ? '0' : 'auto'} !important;
@@ -387,16 +494,160 @@ img[src*="${safeKey}"] {
 
     // ── Reading View & PDF Export Post-Processor ──────────────
     _postProcess(el) {
-        el.querySelectorAll('img').forEach(img => {
-            const key   = this._key(img);
-            const align = this.data.alignments[key] || null;
-            const host  = img.closest('.internal-embed') || img.closest('.image-embed') || img.closest('p') || img.parentElement;
-            if (!host) return;
+        // A. Process Wiki embeds (.internal-embed)
+        const embeds = el.classList.contains('internal-embed')
+            ? [el]
+            : Array.from(el.querySelectorAll('.internal-embed'));
 
+        embeds.forEach(embedEl => {
+            const img = embedEl.querySelector('img');
+            if (img) {
+                this._applyReadingAlignmentAndCaption(img, embedEl);
+            } else {
+                const obs = new MutationObserver((_, observer) => {
+                    const loadedImg = embedEl.querySelector('img');
+                    if (loadedImg) {
+                        this._applyReadingAlignmentAndCaption(loadedImg, embedEl);
+                        observer.disconnect();
+                    }
+                });
+                obs.observe(embedEl, { childList: true, subtree: true });
+            }
+        });
+
+        // B. Process standard Markdown / remote images
+        const imgs = el.querySelectorAll('img');
+        imgs.forEach(img => {
+            if (img.closest('.internal-embed')) return;
+            this._applyReadingAlignmentAndCaption(img, null);
+        });
+    }
+
+    _applyReadingAlignmentAndCaption(img, embedParent) {
+        const key = this._key(img);
+        const align = this.settings.alignments[key] || null;
+        const host = embedParent || img.closest('.image-embed') || img.closest('p') || img.parentElement;
+
+        if (host) {
             host.classList.add('ia-host');
             DIRS.forEach(d => host.classList.remove('ia-' + d));
             if (align) host.classList.add('ia-' + align);
+        }
+
+        // Caption processing
+        if (!this.settings.enableCaptions) {
+            const oldCap = (embedParent || host || img.parentElement)?.querySelector(':scope > .ia-caption, :scope > .image-caption');
+            if (oldCap) oldCap.remove();
+            return;
+        }
+
+        const altText = img.getAttribute('alt');
+        const resolvedAlt = altText || (embedParent ? embedParent.getAttribute('alt') : null);
+        const resolvedSrc = img.getAttribute('src') || (embedParent ? embedParent.getAttribute('src') : null);
+        const captionText = parseCaption(resolvedAlt, this.settings.showFileNameAsCaption, resolvedSrc);
+
+        const container = embedParent || host || img.parentElement;
+        if (!container) return;
+
+        let existingCaption = container.querySelector(':scope > .ia-caption, :scope > .image-caption');
+        if (!existingCaption && img.nextElementSibling && (img.nextElementSibling.classList.contains('ia-caption') || img.nextElementSibling.classList.contains('image-caption'))) {
+            existingCaption = img.nextElementSibling;
+        }
+
+        const effAlign = this._getEffectiveCaptionAlign(align);
+
+        if (captionText) {
+            if (!existingCaption) {
+                existingCaption = document.createElement('div');
+                if (embedParent) {
+                    embedParent.appendChild(existingCaption);
+                } else {
+                    img.after(existingCaption);
+                }
+            }
+            existingCaption.className = `ia-caption align-${effAlign} style-${this.settings.captionStyle}`;
+            existingCaption.textContent = captionText;
+        } else if (existingCaption) {
+            existingCaption.remove();
+        }
+    }
+
+    // ── Live Preview Captions & DOM Observer ──────────────────
+    _initLPObserver() {
+        this.lpObserver = new MutationObserver(() => {
+            this._scanActiveLeavesLPCaptions();
         });
+
+        this.lpObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+        });
+    }
+
+    _scanActiveLeavesLPCaptions() {
+        this.app.workspace.iterateAllLeaves(leaf => {
+            if (!(leaf.view instanceof MarkdownView)) return;
+            if (leaf.view.getMode() === 'preview') return;
+            if (!leaf.view.contentEl) return;
+
+            const imgs = leaf.view.contentEl.querySelectorAll('.markdown-source-view.mod-cm6 img');
+            imgs.forEach(img => {
+                this._injectLPCaption(img);
+            });
+        });
+    }
+
+    _injectLPCaption(img) {
+        if (!img || !(img instanceof HTMLImageElement)) return;
+
+        const embedParent = img.closest('.image-embed') || img.closest('.internal-embed') || img.closest('.cm-embed-block');
+        const key = this._key(img);
+        const align = this.settings.alignments[key] || null;
+
+        if (!this.settings.enableCaptions) {
+            const oldCap = embedParent?.querySelector(':scope > .ia-caption, :scope > .image-caption');
+            if (oldCap) oldCap.remove();
+            return;
+        }
+
+        const altText = img.getAttribute('alt');
+        const resolvedAlt = altText || (embedParent ? embedParent.getAttribute('alt') : null);
+        const resolvedSrc = img.getAttribute('src') || (embedParent ? embedParent.getAttribute('src') : null);
+        const captionText = parseCaption(resolvedAlt, this.settings.showFileNameAsCaption, resolvedSrc);
+
+        const container = embedParent || img.parentElement;
+        if (!container) return;
+
+        let existingCaption = container.querySelector(':scope > .ia-caption, :scope > .image-caption');
+        if (!existingCaption && img.nextElementSibling && (img.nextElementSibling.classList.contains('ia-caption') || img.nextElementSibling.classList.contains('image-caption'))) {
+            existingCaption = img.nextElementSibling;
+        }
+
+        const effAlign = this._getEffectiveCaptionAlign(align);
+
+        if (captionText) {
+            if (!existingCaption) {
+                existingCaption = document.createElement('div');
+                if (embedParent) {
+                    embedParent.appendChild(existingCaption);
+                } else {
+                    img.after(existingCaption);
+                }
+            }
+            existingCaption.className = `ia-caption align-${effAlign} style-${this.settings.captionStyle}`;
+            if (existingCaption.textContent !== captionText) {
+                existingCaption.textContent = captionText;
+            }
+        } else if (existingCaption) {
+            existingCaption.remove();
+        }
+    }
+
+    _getEffectiveCaptionAlign(imageAlign) {
+        if (this.settings.captionAlign === 'match-image') {
+            return imageAlign || 'center';
+        }
+        return this.settings.captionAlign || 'center';
     }
 
     // ── Floating Panel Management ─────────────────────────────
@@ -422,7 +673,7 @@ img[src*="${safeKey}"] {
         this.panel.innerHTML = '';
 
         const key   = this._key(img);
-        const saved = this.data.alignments[key] || null;
+        const saved = this.settings.alignments[key] || null;
 
         DIRS.forEach(dir => {
             const btn = document.createElement('button');
@@ -436,14 +687,14 @@ img[src*="${safeKey}"] {
                 e.preventDefault();
                 e.stopPropagation();
 
-                const cur  = this.data.alignments[key] || null;
+                const cur  = this.settings.alignments[key] || null;
                 const next = cur === dir ? null : dir; // Re-clicking active option toggles it off
 
                 // Persist
                 if (next) {
-                    this.data.alignments[key] = next;
+                    this.settings.alignments[key] = next;
                 } else {
-                    delete this.data.alignments[key];
+                    delete this.settings.alignments[key];
                 }
 
                 // Update UI buttons immediately
@@ -455,7 +706,8 @@ img[src*="${safeKey}"] {
                 });
 
                 await this._saveData();
-                this._rebuildCSS();           // Instantly updates CSS for the active note
+                this._rebuildCSS();           // Instantly updates dynamic CSS
+                this._scanActiveLeavesLPCaptions();
                 this._refreshReadingViews();
 
                 // Re-position toolbar to image's updated top-left position after layout shift
@@ -554,4 +806,74 @@ img[src*="${safeKey}"] {
     }
 }
 
-module.exports = ImageAlignerPlugin;
+// ── Settings Tab ──────────────────────────────────────────────
+class ImageAlignCaptionSettingTab extends PluginSettingTab {
+    constructor(app, plugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
+
+    display() {
+        const { containerEl } = this;
+        containerEl.empty();
+
+        containerEl.createEl('h2', { text: 'Image Align & Caption Settings' });
+
+        new Setting(containerEl)
+            .setName('Enable image captions')
+            .setDesc('Automatically display captions under images from alt text or aliases.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableCaptions)
+                .onChange(async value => {
+                    this.plugin.settings.enableCaptions = value;
+                    await this.plugin._saveData();
+                    this.plugin._scanActiveLeavesLPCaptions();
+                    this.plugin._refreshReadingViews();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show image file name as fallback caption')
+            .setDesc('Use the file name as a caption when no alt text or alias is explicitly specified.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showFileNameAsCaption)
+                .onChange(async value => {
+                    this.plugin.settings.showFileNameAsCaption = value;
+                    await this.plugin._saveData();
+                    this.plugin._scanActiveLeavesLPCaptions();
+                    this.plugin._refreshReadingViews();
+                }));
+
+        new Setting(containerEl)
+            .setName('Caption text alignment')
+            .setDesc('Choose how caption text aligns relative to the image.')
+            .addDropdown(dropdown => dropdown
+                .addOption('match-image', 'Match image alignment (Recommended)')
+                .addOption('left', 'Left')
+                .addOption('center', 'Center')
+                .addOption('right', 'Right')
+                .setValue(this.plugin.settings.captionAlign)
+                .onChange(async value => {
+                    this.plugin.settings.captionAlign = value;
+                    await this.plugin._saveData();
+                    this.plugin._scanActiveLeavesLPCaptions();
+                    this.plugin._refreshReadingViews();
+                }));
+
+        new Setting(containerEl)
+            .setName('Caption text style')
+            .setDesc('Configure font appearance for image captions.')
+            .addDropdown(dropdown => dropdown
+                .addOption('italic', 'Italic')
+                .addOption('normal', 'Normal')
+                .setValue(this.plugin.settings.captionStyle)
+                .onChange(async value => {
+                    this.plugin.settings.captionStyle = value;
+                    await this.plugin._saveData();
+                    this.plugin._scanActiveLeavesLPCaptions();
+                    this.plugin._refreshReadingViews();
+                }));
+    }
+}
+
+module.exports = ImageAlignCaptionPlugin;
+

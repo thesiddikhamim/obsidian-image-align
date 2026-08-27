@@ -1,8 +1,9 @@
 /* ================================================================
-   Image Aligner v2.2 — styles.css
+   Image Align & Caption v3.0 — styles.css
 
    High-performance static CSS rules for Live Preview, Reading View,
-   and PDF Export. Preserves native image resizing & sizing (|300 etc.).
+   and PDF Export. Preserves native image resizing & sizing (|300 etc.)
+   and ensures captions stay cleanly stacked underneath images.
    ================================================================ */
 
 /* ── Live Preview & Reading View Line Containers ─────────────── */
@@ -13,6 +14,8 @@
 .markdown-rendered p.ia-left,
 .ia-host.ia-left {
     display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
     justify-content: flex-start !important;
     text-align: left !important;
 }
@@ -23,6 +26,8 @@
 .markdown-rendered p.ia-center,
 .ia-host.ia-center {
     display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
     justify-content: center !important;
     text-align: center !important;
 }
@@ -33,6 +38,8 @@
 .markdown-rendered p.ia-right,
 .ia-host.ia-right {
     display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
     justify-content: flex-end !important;
     text-align: right !important;
 }
@@ -42,6 +49,8 @@
 .internal-embed.ia-left,
 .image-embed.ia-left {
     display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
     justify-content: flex-start !important;
     margin-left: 0 !important;
     margin-right: auto !important;
@@ -52,6 +61,8 @@
 .internal-embed.ia-center,
 .image-embed.ia-center {
     display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
     justify-content: center !important;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -62,10 +73,19 @@
 .internal-embed.ia-right,
 .image-embed.ia-right {
     display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
     justify-content: flex-end !important;
     margin-left: auto !important;
     margin-right: 0 !important;
     max-width: 100% !important;
+}
+
+/* Base embed layout */
+.internal-embed.image-embed,
+.image-embed {
+    display: inline-flex;
+    flex-direction: column;
 }
 
 /* ── Image elements (Preserve width attribute / style) ───────── */
@@ -97,6 +117,49 @@ img.ia-right {
     margin-left: auto !important;
     margin-right: 0 !important;
     max-width: 100% !important;
+}
+
+/* ── Image Caption Typography & Styling ──────────────────────── */
+.ia-caption,
+.image-caption {
+    display: block !important;
+    width: 100% !important;
+    font-size: 0.85em !important;
+    color: var(--text-muted, #888888) !important;
+    margin-top: 6px !important;
+    margin-bottom: 8px !important;
+    line-height: 1.4 !important;
+    word-break: break-word !important;
+    box-sizing: border-box !important;
+    clear: both !important;
+    pointer-events: auto !important;
+}
+
+/* Dynamic alignment classes */
+.ia-caption.align-left,
+.image-caption.align-left {
+    text-align: left !important;
+}
+
+.ia-caption.align-center,
+.image-caption.align-center {
+    text-align: center !important;
+}
+
+.ia-caption.align-right,
+.image-caption.align-right {
+    text-align: right !important;
+}
+
+/* Dynamic font style classes */
+.ia-caption.style-italic,
+.image-caption.style-italic {
+    font-style: italic !important;
+}
+
+.ia-caption.style-normal,
+.image-caption.style-normal {
+    font-style: normal !important;
 }
 
 /* ── Floating alignment panel ───────────────────────────────── */
@@ -188,6 +251,16 @@ img.ia-right {
         display: none !important;
     }
 
+    .ia-host,
+    .internal-embed,
+    .image-embed,
+    p.ia-left,
+    p.ia-center,
+    p.ia-right {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
     .ia-host.ia-left,
     .internal-embed.ia-left,
     .image-embed.ia-left,
@@ -238,4 +311,11 @@ img.ia-right {
         margin-left: auto !important;
         margin-right: 0 !important;
     }
+
+    .ia-caption,
+    .image-caption {
+        display: block !important;
+        color: #555555 !important;
+    }
 }
+

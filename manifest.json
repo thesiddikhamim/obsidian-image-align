@@ -1,9 +1,9 @@
 {
-  "id": "image-aligner-thesiddikhamim",
-  "name": "Image Aligner",
-  "version": "2.3.0",
+  "id": "image-align-caption",
+  "name": "Image Align & Caption",
+  "version": "3.0.0",
   "minAppVersion": "0.15.0",
-  "description": "Align images left, center, or right in Live Preview & Reading View. Active-page scoped CSS, native resize preservation, and 100% reliable PDF export.",
+  "description": "Align images left, center, or right with automatic caption support in Live Preview & Reading View. Active-page scoped CSS, native resize preservation, and 100% reliable PDF export.",
   "author": "thesiddikhamim",
   "authorUrl": "https://github.com/thesiddikhamim",
   "isDesktopOnly": false

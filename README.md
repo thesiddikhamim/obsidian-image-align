@@ -1,25 +1,27 @@
-# Image Aligner for Obsidian
+# Image Align & Caption for Obsidian
 
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-purple.svg)](https://obsidian.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.3.0-emerald.svg)](manifest.json)
+[![Version](https://img.shields.io/badge/Version-3.0.0-emerald.svg)](manifest.json)
 
-**Image Aligner** is a lightweight, high-performance Obsidian plugin to align images **Left**, **Center**, or **Right** with a single click.
+**Image Align & Caption** is a lightweight, high-performance Obsidian plugin to align images (**Left**, **Center**, or **Right**) and display beautiful, synchronized captions underneath them in both **Live Preview** and **Reading View**.
 
-It adds an intuitive floating toolbar when hovering over images in Live Preview, keeps images permanently aligned, preserves native image resizing (`|300`), and exports cleanly to PDF.
+It combines a 1-click floating alignment toolbar, active-page scoped dynamic CSS, automatic Markdown/Wiki alt text caption parsing, and 100% reliable PDF export—with zero layout conflicts.
 
 ---
 
 ## ✨ Features
 
 - **⚡ 1-Click Floating Toolbar:** Hover over any image in Live Preview to align it Left, Center, or Right.
-- **📍 Top-Left Positioning:** Sits neatly at the image's top-left corner, avoiding any overlap with Obsidian's native embed controls in the top-right.
-- **🔒 Permanent Alignment:** Images in your notes stay aligned automatically from the moment you open the note. Leaving the mouse cursor never resets or unaligns your images.
-- **📐 Native Resizing Preserved:** Full compatibility with Obsidian's size parameters (e.g. `![[image.png|300]]`, `![[image.png|200x150]]`) and corner drag-resizing handles. Never stretches images to 100% width.
-- **📄 100% Reliable PDF Export:** Uses print-tested block margin rules in `@media print` to guarantee that exported PDFs accurately retain your image alignments.
-- **🚀 Active-Page Scoped Performance (v2.3):** Dynamically scopes CSS generation *strictly* to the note you currently have open. Whether you have 10 images or 10,000+ images in your vault, performance remains blazing fast with zero lag.
-- **🎨 Theme Adaptive:** Automatically adopts your Obsidian theme's background colors, border styles, and accent colors in both Light and Dark modes.
-- **🧹 Clean Markdown:** Stores alignment settings non-destructively in plugin data (`data.json`), keeping your raw markdown files clean and untouched.
+- **📝 Synchronized Captions:** Automatically parses and displays captions from Markdown alt text (e.g. `!["Wanderer above the Sea of Fog"|436](https://...)` or `![[image.png|My Caption|300]]`).
+- **📐 Aligned Vertical Layout:** Stacks captions neatly underneath images matching their alignment (Left, Center, Right) without floating sideways or overlapping.
+- **📍 Top-Left Positioning:** Floating toolbar sits neatly at the image's top-left corner, avoiding collisions with Obsidian's native embed controls.
+- **🔒 Permanent Alignment:** Images in your notes stay aligned automatically from the moment you open the note.
+- **📐 Native Resizing Preserved:** Full compatibility with Obsidian's size parameters (e.g. `|300`, `|200x150`) and corner drag-resizing handles.
+- **📄 100% Reliable PDF Export:** Uses print-tested rules in `@media print` to guarantee that exported PDFs accurately retain image alignments and captions.
+- **🚀 Active-Page Scoped Performance:** Dynamically scopes CSS generation strictly to the active note. Blazing fast performance with zero CSS bloat.
+- **🎨 Theme Adaptive & Configurable:** Matches any theme with customizable caption styles (Italic/Normal) and alignment options in Settings.
+- **🧹 Clean Markdown:** Stores alignment settings non-destructively in plugin data (`data.json`), keeping your raw markdown files clean.
 
 ---
 
@@ -31,15 +33,9 @@ It adds an intuitive floating toolbar when hovering over images in Live Preview,
    ```
    <VaultFolder>/.obsidian/plugins/
    ```
-3. Create a new folder named `image-aligner-thesiddikhamim`.
+3. Create a new folder named `image-align-caption`.
 4. Copy `main.js`, `manifest.json`, and `styles.css` into that folder.
-5. Open Obsidian, go to **Settings** > **Community plugins**, click the **Refresh** button, and enable **Image Aligner**.
-
-### Using BRAT
-1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian-42-brat) in Obsidian.
-2. In Obsidian Settings, go to **BRAT** > **Add Beta plugin**.
-3. Paste the repository URL: `thesiddikhamim/obsidian-image-align`.
-4. Enable the plugin under Community Plugins.
+5. Open Obsidian, go to **Settings** > **Community plugins**, click the **Refresh** button, and enable **Image Align & Caption**.
 
 ---
 
@@ -48,12 +44,14 @@ It adds an intuitive floating toolbar when hovering over images in Live Preview,
 1. **Align an Image:**
    - In **Live Preview**, hover your cursor over any image embed or link.
    - Click **Left**, **Center**, or **Right** on the top-left floating toolbar.
-2. **Reset / Remove Alignment:**
+2. **Add Captions:**
+   - **Wiki Links:** `![[image.png|My Caption|300]]`
+   - **Markdown Links:** `!["Caspar David Friedrich"|436](https://example.com/image.jpg)`
+   - The caption text will automatically render underneath the image matching the selected alignment.
+3. **Reset / Remove Alignment:**
    - Click the currently active alignment button again to toggle it off and return to default alignment.
-3. **Resize Images:**
-   - Use standard Obsidian pipe syntax (e.g. `![[photo.png|400]]`) or drag the resize handle at the bottom-right of the image. The alignment will adjust to the new size dynamically.
-4. **Export to PDF:**
-   - Go to **File menu (three dots)** > **Export to PDF**. Your image alignments will be preserved in the output PDF document.
+4. **Customize in Settings:**
+   - Go to **Settings** > **Image Align & Caption** to customize caption visibility, font style (Italic/Normal), alignment preferences, and fallback filename captions.
 
 ---
 
