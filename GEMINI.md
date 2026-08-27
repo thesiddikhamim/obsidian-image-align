@@ -25,8 +25,8 @@ This project is a vanilla JavaScript Obsidian plugin and does not require a buil
 
 ### Installation
 1.  Navigate to your Obsidian vault's plugins directory: `.obsidian/plugins/`.
-2.  Create a new folder named `image-aligner`.
-3.  Copy the following files into the `image-aligner` folder:
+2.  Create a new folder named `image-aligner-thesiddikhamim`.
+3.  Copy the following files into the `image-aligner-thesiddikhamim` folder:
     - `main.js`
     - `manifest.json`
     - `styles.css`

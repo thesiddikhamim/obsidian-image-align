@@ -1,10 +1,10 @@
 {
-  "id": "image-aligner",
+  "id": "image-aligner-thesiddikhamim",
   "name": "Image Aligner",
   "version": "2.2.0",
   "minAppVersion": "0.15.0",
   "description": "Align images left, center, or right in Live Preview & Reading View. High-performance, zero style injection, and preserves layout in PDF export.",
-  "author": "Custom Plugin",
-  "authorUrl": "",
+  "author": "thesiddikhamim",
+  "authorUrl": "https://github.com/thesiddikhamim",
   "isDesktopOnly": false
 }
