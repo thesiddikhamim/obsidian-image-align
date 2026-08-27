@@ -1,55 +1,59 @@
 /* ================================================================
-   Image Aligner v2 — styles.css
+   Image Aligner v2.1 — styles.css
 
-   Alignment visuals are handled by the dynamic <style> element
-   injected by main.js (img[src="..."] rules), which works in
-   Live Preview, Reading mode, and PDF export.
+   Alignment visuals are primarily handled by the dynamic <style>
+   element injected by main.js, supporting Live Preview, Reading
+   View, and PDF export.
 
    This file covers:
-     • The floating hover panel (Live Preview only)
-     • The .ia-host wrapper classes (print fallback)
+     • The floating alignment toolbar (theme-adaptive)
+     • The .ia-host wrapper classes (Reading View & print fallback)
      • @media print rules
    ================================================================ */
 
-
 /* ── Floating alignment panel ───────────────────────────────── */
-/* Sits in document.body with position:fixed so it is always
-   at the image's top-right regardless of scroll or layout.   */
+/* Single shared panel in document.body with position: fixed.    */
 .ia-float-panel {
     position: fixed;
-    z-index: 9999;
+    z-index: var(--layer-popover, 9999);
 
     /* Layout */
-    display: flex;          /* toggled to 'none' by JS when hidden */
+    display: none;
     flex-direction: row;
     align-items: center;
-    gap: 2px;
-    padding: 4px 6px;
+    gap: 3px;
+    padding: 3px 4px;
 
-    /* Visuals */
-    background: rgba(12, 12, 12, 0.74);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 9px;
-    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.38), 0 1px 3px rgba(0,0,0,0.2);
+    /* Theme-adaptive glassmorphism */
+    background: var(--background-secondary, #202020);
+    border: 1px solid var(--background-modifier-border, rgba(128, 128, 128, 0.2));
+    border-radius: var(--radius-m, 8px);
+    box-shadow: var(--shadow-s, 0 4px 14px rgba(0, 0, 0, 0.2)), 0 1px 3px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 
-    /* Prevent panel from interfering with editor events */
+    /* Prevents interfering with editor selection */
     pointer-events: auto;
+    user-select: none;
 
     /* Subtle entrance animation */
-    animation: ia-fadein 0.14s ease;
+    animation: ia-fadein 0.12s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes ia-fadein {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-3px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
-
 
 /* ── Alignment buttons inside the panel ──────────────────────── */
 .ia-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
 
@@ -60,57 +64,50 @@
 
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: var(--radius-s, 5px);
     cursor: pointer;
     line-height: 0;
 
-    color: rgba(255, 255, 255, 0.80);
-    transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+    color: var(--text-muted, rgba(128, 128, 128, 0.8));
+    transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
 }
 
 .ia-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
-    border-color: rgba(255, 255, 255, 0.15);
+    background: var(--background-modifier-hover, rgba(128, 128, 128, 0.15));
+    color: var(--text-normal, inherit);
+}
+
+.ia-btn:active {
+    transform: scale(0.94);
 }
 
 /* Active / currently-applied alignment */
 .ia-btn.ia-on {
-    background: rgba(96, 165, 250, 0.20);
-    color: #93c5fd;
-    border-color: rgba(96, 165, 250, 0.38);
+    background: var(--interactive-accent, #7057ff);
+    color: var(--text-on-accent, #ffffff);
+    border-color: transparent;
 }
 
 .ia-btn.ia-on:hover {
-    background: rgba(96, 165, 250, 0.30);
-    color: #bfdbfe;
+    background: var(--interactive-accent-hover, #7d67ff);
+    color: var(--text-on-accent, #ffffff);
 }
 
-
-/* ── Reading mode wrapper (added by post-processor) ─────────── */
-/* The dynamic CSS in main.js handles the actual visual alignment.
-   These classes are here as a structural hook for print rules.   */
+/* ── Reading mode wrapper ───────────────────────────────────── */
 .ia-host {
     display: block;
 }
 
-
 /* ================================================================
    PRINT / PDF EXPORT
-   ================================================================
-   Primary alignment is handled by the dynamic img[src="..."] rules
-   in main.js which are present during PDF export.
-
-   These class-based rules are a belt-and-suspenders fallback for
-   environments where the dynamic <style> might not be available.
    ================================================================ */
 @media print {
-    /* Never show the floating panel in PDFs */
+    /* Always hide floating toolbar in exported PDFs */
     .ia-float-panel {
         display: none !important;
     }
 
-    /* Class-based fallback for reading-mode wrappers */
+    /* Reading-mode wrapper fallback rules */
     .ia-host.ia-left   img { display: block !important; margin: 0 auto 0 0    !important; }
     .ia-host.ia-center img { display: block !important; margin: 0 auto        !important; }
     .ia-host.ia-right  img { display: block !important; margin: 0 0   0 auto  !important; }
