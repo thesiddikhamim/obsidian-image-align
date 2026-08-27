@@ -1,13 +1,14 @@
 'use strict';
 
 /* ============================================================
-   Image Aligner — Obsidian Plugin v2.2
+   Image Aligner — Obsidian Plugin v2.3
    ─────────────────────────────────────────────────────────
-   • High performance: scales to 10k+ images with zero lag
-   • Static CSS + scoped DOM decoration (no style injection)
-   • 1-Click floating toolbar for Live Preview (top-left)
-   • 100% reliable PDF export support via Markdown Post-Processor
-   • Safe key matching with no filename collisions
+   • Permanent styling: All images on viewed pages are aligned
+     automatically without needing to hover.
+   • Resizing support: Preserves |300, |200x100 and drag handles.
+   • 1-Click floating toolbar at image top-left (Live Preview).
+   • Supports Left, Center, Right in Live Preview, Reading View
+     and PDF Export.
    ============================================================ */
 
 const { Plugin, MarkdownView } = require('obsidian');
@@ -42,51 +43,54 @@ const ICONS = {
 
 const DIRS = ['left', 'center', 'right'];
 
+function escapeCSS(str) {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+        return CSS.escape(str);
+    }
+    return str.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+}
+
 class ImageAlignerPlugin extends Plugin {
 
     data      = { alignments: {} }; // { [key]: 'left'|'center'|'right' }
+    styleEl   = null;               // <style id="ia-dynamic"> for permanent styling
     panel     = null;               // Single shared floating panel in document.body
     activeImg = null;               // Currently hovered <img> element
     hideTimer = null;               // Panel hide delay timer
-    observer  = null;               // MutationObserver for Live Preview DOM updates
 
     // ── Lifecycle ─────────────────────────────────────────────
     async onload() {
         await this._loadData();
         this._migrateData();
 
-        // ① Reading view & PDF Export post-processor
+        // ① Dynamic <style> for permanent, automatic alignment across all notes
+        this.styleEl = document.createElement('style');
+        this.styleEl.id = 'ia-dynamic';
+        document.head.appendChild(this.styleEl);
+        this._rebuildCSS();
+
+        // ② Reading view & PDF Export post-processor
         this.registerMarkdownPostProcessor((el) => this._postProcess(el));
 
-        // ② Single shared floating alignment toolbar
+        // ③ Single shared floating alignment toolbar (top-left)
         this._initFloatingPanel();
 
-        // ③ Global delegated events
+        // ④ Global delegated events
         this.registerDomEvent(document, 'mouseover', (e) => this._onMouseOver(e));
         this.registerDomEvent(document, 'mouseout',  (e) => this._onMouseOut(e));
         this.registerDomEvent(window,   'scroll',    () => this._onScroll(), { capture: true, passive: true });
         this.registerDomEvent(window,   'resize',    () => this._onResize(), { passive: true });
 
-        // ④ Live Preview decoration observer (decorates images as they scroll/render)
-        this._initLivePreviewObserver();
-        this.registerEvent(this.app.workspace.on('active-leaf-change', () => this._decorateActiveView()));
-        this.registerEvent(this.app.workspace.on('layout-change', () => this._decorateActiveView()));
-
-        // Initial decoration
-        this._decorateActiveView();
-
-        console.log('[Image Aligner] v2.2 loaded (High Performance Mode)');
+        console.log('[Image Aligner] v2.3 loaded');
     }
 
     onunload() {
         if (this.hideTimer) clearTimeout(this.hideTimer);
-        if (this.observer) this.observer.disconnect();
-
+        this.styleEl?.remove();
         this.panel?.remove();
         this.panel = null;
         this.activeImg = null;
 
-        // Safety cleanup of any stale floating panel elements
         document.querySelectorAll('.ia-float-panel').forEach(el => el.remove());
     }
 
@@ -179,83 +183,105 @@ class ImageAlignerPlugin extends Plugin {
         return src;
     }
 
-    // ── Scoped DOM Decoration (O(1) Instant Styling) ──────────
-    _decorateImage(img) {
-        if (!img || !(img instanceof HTMLImageElement)) return;
-        const key = this._key(img);
-        const align = this.data.alignments[key] || null;
+    // ── Rebuild Dynamic CSS (Guarantees ALL images stay aligned permanently) ─
+    _rebuildCSS() {
+        if (!this.styleEl) return;
+        const lines = [];
 
-        const targets = new Set();
-        targets.add(img);
+        for (const [key, align] of Object.entries(this.data.alignments)) {
+            if (!DIRS.includes(align)) continue;
 
-        const embed = img.closest('.internal-embed') || img.closest('.image-embed');
-        if (embed) targets.add(embed);
+            const isLink = key.startsWith('link:');
+            const rawPath = isLink ? key.substring(5).trim() : key.trim();
+            const filename = rawPath.split('/').pop().split('?')[0];
 
-        const cmBlock = img.closest('.cm-embed-block') || img.closest('.cm-line');
-        if (cmBlock) targets.add(cmBlock);
+            const safeRaw = escapeCSS(rawPath);
+            const safeFile = escapeCSS(filename);
+            const encFile = escapeCSS(encodeURIComponent(filename));
 
-        const p = img.closest('p');
-        if (p) targets.add(p);
+            const justifyVal = align === 'center' ? 'center' : (align === 'right' ? 'flex-end' : 'flex-start');
+            const textAlign  = align === 'center' ? 'center' : (align === 'right' ? 'right' : 'left');
+            const marginVal  = align === 'center' ? 'auto auto' : (align === 'right' ? '0 0 0 auto' : '0 auto 0 0');
+            const marginEmbed = align === 'center' ? 'auto' : (align === 'right' ? 'auto 0' : '0 auto');
 
-        if (img.parentElement) targets.add(img.parentElement);
+            if (isLink) {
+                // 1. Line / Paragraph containers
+                lines.push(`
+.markdown-source-view.mod-cm6 .cm-embed-block:has(.internal-embed[src*="${safeFile}"]),
+.markdown-source-view.mod-cm6 .cm-embed-block:has(.image-embed[src*="${safeFile}"]),
+.markdown-source-view.mod-cm6 .cm-line:has(.internal-embed[src*="${safeFile}"]),
+.markdown-rendered p:has(.internal-embed[src*="${safeFile}"]),
+.markdown-rendered p:has(img[data-path*="${safeFile}"]),
+.markdown-rendered p:has(img[src*="${safeFile}"]) {
+    display: flex !important;
+    justify-content: ${justifyVal} !important;
+    text-align: ${textAlign} !important;
+}`);
 
-        targets.forEach(el => {
-            DIRS.forEach(d => el.classList.remove('ia-' + d));
-            el.classList.remove('ia-host');
-            if (align) {
-                el.classList.add('ia-host');
-                el.classList.add('ia-' + align);
+                // 2. Embed container (Never set width: 100% so resizing works)
+                lines.push(`
+.internal-embed[src*="${safeFile}"],
+.image-embed[src*="${safeFile}"],
+.internal-embed[src^="${safeRaw}|"],
+.internal-embed[src="${safeRaw}"] {
+    display: inline-flex !important;
+    justify-content: ${justifyVal} !important;
+    margin-left: ${align === 'left' ? '0' : 'auto'} !important;
+    margin-right: ${align === 'right' ? '0' : 'auto'} !important;
+    max-width: 100% !important;
+}`);
+
+                // 3. Image element
+                lines.push(`
+img[src*="/${encFile}?"],
+img[src$="/${encFile}"],
+img[src*="/${safeFile}?"],
+img[src$="/${safeFile}"],
+img[data-path*="${safeFile}"],
+.internal-embed[src*="${safeFile}"] img,
+.image-embed[src*="${safeFile}"] img {
+    display: block !important;
+    margin-left: ${align === 'left' ? '0' : 'auto'} !important;
+    margin-right: ${align === 'right' ? '0' : 'auto'} !important;
+    max-width: 100% !important;
+}`);
+            } else {
+                // External web image
+                const safeKey = escapeCSS(rawPath);
+                lines.push(`
+.markdown-source-view.mod-cm6 .cm-embed-block:has(img[src="${safeKey}"]),
+.markdown-rendered p:has(img[src="${safeKey}"]) {
+    display: flex !important;
+    justify-content: ${justifyVal} !important;
+    text-align: ${textAlign} !important;
+}
+img[src="${safeKey}"] {
+    display: block !important;
+    margin-left: ${align === 'left' ? '0' : 'auto'} !important;
+    margin-right: ${align === 'right' ? '0' : 'auto'} !important;
+    max-width: 100% !important;
+}`);
             }
-        });
-    }
-
-    _decorateContainer(container) {
-        if (!container) return;
-        const imgs = container.querySelectorAll('img');
-        for (let i = 0; i < imgs.length; i++) {
-            this._decorateImage(imgs[i]);
         }
-    }
 
-    _decorateActiveView() {
-        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeView && activeView.contentEl) {
-            this._decorateContainer(activeView.contentEl);
-        }
-    }
+        // Print rule for panel hiding
+        lines.push('@media print { .ia-float-panel { display: none !important; } }');
 
-    // Live Preview Observer for smooth scrolling and virtual DOM rendering
-    _initLivePreviewObserver() {
-        let debounceTimer = null;
-        this.observer = new MutationObserver((mutations) => {
-            if (debounceTimer) return;
-            debounceTimer = requestAnimationFrame(() => {
-                debounceTimer = null;
-                for (const mutation of mutations) {
-                    if (mutation.type === 'childList') {
-                        for (const node of mutation.addedNodes) {
-                            if (node instanceof HTMLElement) {
-                                if (node instanceof HTMLImageElement) {
-                                    this._decorateImage(node);
-                                } else {
-                                    this._decorateContainer(node);
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        });
-
-        this.observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        this.styleEl.textContent = lines.join('\n');
     }
 
     // ── Reading View & PDF Export Post-Processor ──────────────
     _postProcess(el) {
-        this._decorateContainer(el);
+        el.querySelectorAll('img').forEach(img => {
+            const key   = this._key(img);
+            const align = this.data.alignments[key] || null;
+            const host  = img.closest('.internal-embed') || img.closest('p') || img.parentElement;
+            if (!host) return;
+
+            host.classList.add('ia-host');
+            DIRS.forEach(d => host.classList.remove('ia-' + d));
+            if (align) host.classList.add('ia-' + align);
+        });
     }
 
     // ── Floating Panel Management ─────────────────────────────
@@ -313,10 +339,8 @@ class ImageAlignerPlugin extends Plugin {
                     b.setAttribute('aria-label', `Align ${d[0].toUpperCase() + d.slice(1)}${active ? ' (Active - click to reset)' : ''}`);
                 });
 
-                // Instantly apply class decoration to active image & container
-                this._decorateImage(img);
-
                 await this._saveData();
+                this._rebuildCSS();           // Instantly updates stylesheet permanently for all views
                 this._refreshReadingViews();
 
                 // Re-position toolbar to image's updated top-left position after layout shift
@@ -362,7 +386,6 @@ class ImageAlignerPlugin extends Plugin {
         }
 
         this.activeImg = img;
-        this._decorateImage(img);
         this._populatePanel(img);
         this._reposition(img);
         this.panel.style.display = 'flex';
