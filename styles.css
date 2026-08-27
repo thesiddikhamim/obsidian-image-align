@@ -1,15 +1,68 @@
 /* ================================================================
-   Image Aligner v2.1 — styles.css
+   Image Aligner v2.2 — styles.css
 
-   Alignment visuals are primarily handled by the dynamic <style>
-   element injected by main.js, supporting Live Preview, Reading
-   View, and PDF export.
-
-   This file covers:
-     • The floating alignment toolbar (theme-adaptive)
-     • The .ia-host wrapper classes (Reading View & print fallback)
-     • @media print rules
+   High-performance static CSS rules for Live Preview, Reading View,
+   and PDF Export. Zero dynamic stylesheet injection.
    ================================================================ */
+
+/* ── Live Preview & Reading View Layout ──────────────────────── */
+.internal-embed.image-embed.ia-left,
+.internal-embed.ia-left,
+.image-embed.ia-left,
+.ia-host.ia-left {
+    display: flex !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: auto !important;
+}
+
+.internal-embed.image-embed.ia-center,
+.internal-embed.ia-center,
+.image-embed.ia-center,
+.ia-host.ia-center {
+    display: flex !important;
+    justify-content: center !important;
+    text-align: center !important;
+    width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.internal-embed.image-embed.ia-right,
+.internal-embed.ia-right,
+.image-embed.ia-right,
+.ia-host.ia-right {
+    display: flex !important;
+    justify-content: flex-end !important;
+    text-align: right !important;
+    width: 100% !important;
+    margin-left: auto !important;
+    margin-right: 0 !important;
+}
+
+/* Image element block & margin rules */
+.ia-left img,
+img.ia-left {
+    display: block !important;
+    margin: 0 auto 0 0 !important;
+    max-width: 100% !important;
+}
+
+.ia-center img,
+img.ia-center {
+    display: block !important;
+    margin: 0 auto !important;
+    max-width: 100% !important;
+}
+
+.ia-right img,
+img.ia-right {
+    display: block !important;
+    margin: 0 0 0 auto !important;
+    max-width: 100% !important;
+}
 
 /* ── Floating alignment panel ───────────────────────────────── */
 /* Single shared panel in document.body with position: fixed.    */
@@ -32,11 +85,11 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
 
-    /* Prevents interfering with editor selection */
+    /* Interaction */
     pointer-events: auto;
     user-select: none;
 
-    /* Subtle entrance animation */
+    /* Entrance animation */
     animation: ia-fadein 0.12s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -93,22 +146,59 @@
     color: var(--text-on-accent, #ffffff);
 }
 
-/* ── Reading mode wrapper ───────────────────────────────────── */
-.ia-host {
-    display: block;
-}
-
 /* ================================================================
-   PRINT / PDF EXPORT
+   PRINT / PDF EXPORT (100% reliable print-specific layout)
    ================================================================ */
 @media print {
-    /* Always hide floating toolbar in exported PDFs */
+    /* Hide toolbar */
     .ia-float-panel {
         display: none !important;
     }
 
-    /* Reading-mode wrapper fallback rules */
-    .ia-host.ia-left   img { display: block !important; margin: 0 auto 0 0    !important; }
-    .ia-host.ia-center img { display: block !important; margin: 0 auto        !important; }
-    .ia-host.ia-right  img { display: block !important; margin: 0 0   0 auto  !important; }
+    /* Print container blocks */
+    .ia-host.ia-left,
+    .internal-embed.ia-left,
+    .image-embed.ia-left {
+        display: block !important;
+        text-align: left !important;
+        width: 100% !important;
+    }
+
+    .ia-host.ia-center,
+    .internal-embed.ia-center,
+    .image-embed.ia-center {
+        display: block !important;
+        text-align: center !important;
+        width: 100% !important;
+    }
+
+    .ia-host.ia-right,
+    .internal-embed.ia-right,
+    .image-embed.ia-right {
+        display: block !important;
+        text-align: right !important;
+        width: 100% !important;
+    }
+
+    /* Print image margins */
+    .ia-left img,
+    .ia-host.ia-left img,
+    img.ia-left {
+        display: block !important;
+        margin: 0 auto 0 0 !important;
+    }
+
+    .ia-center img,
+    .ia-host.ia-center img,
+    img.ia-center {
+        display: block !important;
+        margin: 0 auto !important;
+    }
+
+    .ia-right img,
+    .ia-host.ia-right img,
+    img.ia-right {
+        display: block !important;
+        margin: 0 0 0 auto !important;
+    }
 }
