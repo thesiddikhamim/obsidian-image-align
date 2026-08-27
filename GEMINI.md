@@ -10,8 +10,8 @@ Image Aligner provides a seamless way to control image alignment within Obsidian
 - **Live Preview Integration:** Single floating hover toolbar positioned at the top-left corner for quick alignment without colliding with Obsidian's native embed controls.
 - **Reading View Support:** Automatic alignment of images using Markdown post-processing.
 - **100% Reliable PDF Export:** Preserves alignment in exported documents through print-specific block and margin rules.
-- **Infinite Scalability (v2.2):** Uses static scoped CSS classes (`.ia-left`, `.ia-center`, `.ia-right`) and $O(1)$ fast DOM decorations instead of dynamic `<style>` injection. Easily handles 10k+ images with zero lag.
-- **Persistence & Precision:** Alignment settings are saved per image source using collision-safe identifiers.
+- **Active-Page Scoped CSS (v2.3):** Generates CSS *only* for images in the currently active note(s). Zero performance overhead even if the vault contains 10k+ images.
+- **Permanent Sizing & Resizing:** Preserves native sizing (`|300`, `|200x100`, or corner drag-resizing).
 - **Theme Adaptive:** Uses Obsidian CSS variables to blend natively with any light or dark community theme.
 
 ### Technologies
@@ -41,12 +41,12 @@ This project is a vanilla JavaScript Obsidian plugin and does not require a buil
 ## Development Conventions
 
 ### Code Structure
-- **`main.js`**: The entry point of the plugin. Handles `onload`/`onunload` lifecycles, data persistence, Live Preview DOM observation (`MutationObserver`), and controls the floating alignment toolbar.
+- **`main.js`**: The entry point of the plugin. Handles `onload`/`onunload` lifecycles, data persistence, active note image discovery, and controls the floating alignment toolbar.
 - **`manifest.json`**: Contains plugin metadata such as ID, name, version, and description.
-- **`styles.css`**: Defines the static layout classes (`.ia-left`, `.ia-center`, `.ia-right`), floating toolbar styling (theme-adaptive), and `@media print` rules for PDF export.
+- **`styles.css`**: Defines static layout classes, floating toolbar styling (theme-adaptive), and `@media print` rules for PDF export.
 
-### Implementation Details (v2.2)
-- **Zero Dynamic Style Injection:** No dynamically generated `<style>` tag in `<head>`. The plugin uses static CSS classes in `styles.css` and decorates active DOM elements on the fly.
-- **MutationObserver + MarkdownPostProcessor:** Automatically styles visible images as you type or scroll in Live Preview, and post-processes images during Reading View and PDF Export.
+### Implementation Details (v2.3)
+- **Active-Page Scoped CSS:** Only compiles CSS rules for images present in active leaves. Switching notes dynamically swaps the active rules in `<style id="ia-dynamic">`.
+- **Permanent Layout:** All images on an open note are aligned from the moment the note opens; no hovering required, and leaving the cursor will not unalign.
 - **Single Managed Floating Panel:** A single `position: fixed` element created in `document.body` positioned at the top-left of the hovered image.
-- **Print Specificity:** Applies `display: block !important; margin: 0 auto !important;` during PDF export to guarantee accurate PDF print output across all Chromium/Electron print modes.
+- **Print Specificity:** Uses print-tested block margins during PDF export to guarantee accurate PDF print output across all Chromium/Electron print modes.

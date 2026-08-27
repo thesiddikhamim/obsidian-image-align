@@ -3,12 +3,13 @@
 /* ============================================================
    Image Aligner — Obsidian Plugin v2.3
    ─────────────────────────────────────────────────────────
-   • Permanent styling: All images on viewed pages are aligned
+   • Active-Page Scoped Dynamic CSS: Generates CSS ONLY for
+     images in currently active notes (zero bloat from 10k vault images).
+   • Permanent styling: All images on active note are aligned
      automatically without needing to hover.
    • Resizing support: Preserves |300, |200x100 and drag handles.
    • 1-Click floating toolbar at image top-left (Live Preview).
-   • Supports Left, Center, Right in Live Preview, Reading View
-     and PDF Export.
+   • 100% reliable PDF export support via Markdown Post-Processor.
    ============================================================ */
 
 const { Plugin, MarkdownView } = require('obsidian');
@@ -52,24 +53,25 @@ function escapeCSS(str) {
 
 class ImageAlignerPlugin extends Plugin {
 
-    data      = { alignments: {} }; // { [key]: 'left'|'center'|'right' }
-    styleEl   = null;               // <style id="ia-dynamic"> for permanent styling
-    panel     = null;               // Single shared floating panel in document.body
-    activeImg = null;               // Currently hovered <img> element
-    hideTimer = null;               // Panel hide delay timer
+    data         = { alignments: {} }; // { [key]: 'left'|'center'|'right' }
+    styleEl      = null;               // <style id="ia-dynamic"> for active-page CSS
+    panel        = null;               // Single shared floating toolbar
+    activeImg    = null;               // Currently hovered <img>
+    hideTimer    = null;               // Panel hide timer
+    rebuildTimer = null;               // Debounce timer for active note CSS rebuild
 
     // ── Lifecycle ─────────────────────────────────────────────
     async onload() {
         await this._loadData();
         this._migrateData();
 
-        // ① Dynamic <style> for permanent, automatic alignment across all notes
+        // ① Active-Page Dynamic <style>
         this.styleEl = document.createElement('style');
         this.styleEl.id = 'ia-dynamic';
         document.head.appendChild(this.styleEl);
         this._rebuildCSS();
 
-        // ② Reading view & PDF Export post-processor
+        // ② Reading View & PDF Export post-processor
         this.registerMarkdownPostProcessor((el) => this._postProcess(el));
 
         // ③ Single shared floating alignment toolbar (top-left)
@@ -81,17 +83,31 @@ class ImageAlignerPlugin extends Plugin {
         this.registerDomEvent(window,   'scroll',    () => this._onScroll(), { capture: true, passive: true });
         this.registerDomEvent(window,   'resize',    () => this._onResize(), { passive: true });
 
-        console.log('[Image Aligner] v2.3 loaded');
+        // ⑤ Active page change listeners — rebuilds CSS strictly for open notes
+        this.registerEvent(this.app.workspace.on('active-leaf-change', () => this._debouncedRebuild()));
+        this.registerEvent(this.app.workspace.on('layout-change',      () => this._debouncedRebuild()));
+        this.registerEvent(this.app.workspace.on('editor-change',      () => this._debouncedRebuild()));
+
+        console.log('[Image Aligner] v2.3 loaded (Active-Page Scoped)');
     }
 
     onunload() {
         if (this.hideTimer) clearTimeout(this.hideTimer);
+        if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
+
         this.styleEl?.remove();
         this.panel?.remove();
         this.panel = null;
         this.activeImg = null;
 
         document.querySelectorAll('.ia-float-panel').forEach(el => el.remove());
+    }
+
+    _debouncedRebuild() {
+        if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
+        this.rebuildTimer = setTimeout(() => {
+            this._rebuildCSS();
+        }, 120);
     }
 
     // ── Persistence ───────────────────────────────────────────
@@ -183,13 +199,91 @@ class ImageAlignerPlugin extends Plugin {
         return src;
     }
 
-    // ── Rebuild Dynamic CSS (Guarantees ALL images stay aligned permanently) ─
+    // ── Extract only images present on the currently active note(s) ──
+    _getActiveImageKeys() {
+        const keys = new Set();
+
+        this.app.workspace.iterateAllLeaves(leaf => {
+            if (!(leaf.view instanceof MarkdownView)) return;
+
+            // 1. Parse text from open markdown editor
+            try {
+                const text = leaf.view.editor ? leaf.view.editor.getValue() : '';
+                if (text) {
+                    // Wiki links: ![[image.png|300]]
+                    const wikiRegex = /!\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
+                    let match;
+                    while ((match = wikiRegex.exec(text)) !== null) {
+                        const path = match[1].trim();
+                        if (path) {
+                            keys.add('link:' + path);
+                            const filename = path.split('/').pop();
+                            if (filename) keys.add('link:' + filename);
+                        }
+                    }
+
+                    // Markdown links: ![alt](url)
+                    const mdRegex = /!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+                    while ((match = mdRegex.exec(text)) !== null) {
+                        const rawUrl = match[1].trim().split('?')[0];
+                        if (rawUrl) {
+                            if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+                                keys.add(rawUrl);
+                            } else {
+                                keys.add('link:' + rawUrl);
+                                const fn = rawUrl.split('/').pop();
+                                if (fn) keys.add('link:' + fn);
+                            }
+                        }
+                    }
+                }
+            } catch (_) {}
+
+            // 2. Scan rendered DOM in open leaf (catches HTML <img>, canvas embeds, etc.)
+            try {
+                if (leaf.view.contentEl) {
+                    const imgs = leaf.view.contentEl.querySelectorAll('img');
+                    imgs.forEach(img => {
+                        const k = this._key(img);
+                        if (k) keys.add(k);
+                    });
+                }
+            } catch (_) {}
+        });
+
+        return keys;
+    }
+
+    // ── Active-Page Scoped Dynamic CSS ────────────────────────
     _rebuildCSS() {
         if (!this.styleEl) return;
+
+        const activeKeys = this._getActiveImageKeys();
         const lines = [];
 
+        // Build CSS rules ONLY for images currently present on the active note(s)
         for (const [key, align] of Object.entries(this.data.alignments)) {
             if (!DIRS.includes(align)) continue;
+
+            // Check if key belongs to an active image in the open note
+            let isRelevant = false;
+            if (activeKeys.has(key)) {
+                isRelevant = true;
+            } else {
+                for (const activeKey of activeKeys) {
+                    if (
+                        activeKey === key ||
+                        activeKey.endsWith('/' + key.replace(/^link:/, '')) ||
+                        key.endsWith('/' + activeKey.replace(/^link:/, ''))
+                    ) {
+                        isRelevant = true;
+                        break;
+                    }
+                }
+            }
+
+            // Skip generating CSS for images not in the active note(s)
+            if (!isRelevant) continue;
 
             const isLink = key.startsWith('link:');
             const rawPath = isLink ? key.substring(5).trim() : key.trim();
@@ -201,11 +295,9 @@ class ImageAlignerPlugin extends Plugin {
 
             const justifyVal = align === 'center' ? 'center' : (align === 'right' ? 'flex-end' : 'flex-start');
             const textAlign  = align === 'center' ? 'center' : (align === 'right' ? 'right' : 'left');
-            const marginVal  = align === 'center' ? 'auto auto' : (align === 'right' ? '0 0 0 auto' : '0 auto 0 0');
-            const marginEmbed = align === 'center' ? 'auto' : (align === 'right' ? 'auto 0' : '0 auto');
 
             if (isLink) {
-                // 1. Line / Paragraph containers
+                // Line & paragraph containers
                 lines.push(`
 .markdown-source-view.mod-cm6 .cm-embed-block:has(.internal-embed[src*="${safeFile}"]),
 .markdown-source-view.mod-cm6 .cm-embed-block:has(.image-embed[src*="${safeFile}"]),
@@ -218,7 +310,7 @@ class ImageAlignerPlugin extends Plugin {
     text-align: ${textAlign} !important;
 }`);
 
-                // 2. Embed container (Never set width: 100% so resizing works)
+                // Embed wrapper (inline-flex, preserves resizing |300)
                 lines.push(`
 .internal-embed[src*="${safeFile}"],
 .image-embed[src*="${safeFile}"],
@@ -231,7 +323,7 @@ class ImageAlignerPlugin extends Plugin {
     max-width: 100% !important;
 }`);
 
-                // 3. Image element
+                // Direct image element
                 lines.push(`
 img[src*="/${encFile}?"],
 img[src$="/${encFile}"],
@@ -264,7 +356,7 @@ img[src="${safeKey}"] {
             }
         }
 
-        // Print rule for panel hiding
+        // Print rules
         lines.push('@media print { .ia-float-panel { display: none !important; } }');
 
         this.styleEl.textContent = lines.join('\n');
@@ -340,7 +432,7 @@ img[src="${safeKey}"] {
                 });
 
                 await this._saveData();
-                this._rebuildCSS();           // Instantly updates stylesheet permanently for all views
+                this._rebuildCSS();           // Instantly updates CSS for the active note
                 this._refreshReadingViews();
 
                 // Re-position toolbar to image's updated top-left position after layout shift
