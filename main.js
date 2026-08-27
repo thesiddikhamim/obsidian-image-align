@@ -185,20 +185,28 @@ class ImageAlignerPlugin extends Plugin {
         const key = this._key(img);
         const align = this.data.alignments[key] || null;
 
-        const embed = img.closest('.internal-embed') || img.closest('.image-embed') || img.parentElement;
+        const targets = new Set();
+        targets.add(img);
 
-        DIRS.forEach(d => {
-            img.classList.remove('ia-' + d);
-            if (embed) embed.classList.remove('ia-' + d);
-        });
+        const embed = img.closest('.internal-embed') || img.closest('.image-embed');
+        if (embed) targets.add(embed);
 
-        if (align) {
-            img.classList.add('ia-' + align);
-            if (embed) {
-                embed.classList.add('ia-host');
-                embed.classList.add('ia-' + align);
+        const cmBlock = img.closest('.cm-embed-block') || img.closest('.cm-line');
+        if (cmBlock) targets.add(cmBlock);
+
+        const p = img.closest('p');
+        if (p) targets.add(p);
+
+        if (img.parentElement) targets.add(img.parentElement);
+
+        targets.forEach(el => {
+            DIRS.forEach(d => el.classList.remove('ia-' + d));
+            el.classList.remove('ia-host');
+            if (align) {
+                el.classList.add('ia-host');
+                el.classList.add('ia-' + align);
             }
-        }
+        });
     }
 
     _decorateContainer(container) {

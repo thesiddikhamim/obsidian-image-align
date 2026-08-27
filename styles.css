@@ -2,11 +2,19 @@
    Image Aligner v2.2 — styles.css
 
    High-performance static CSS rules for Live Preview, Reading View,
-   and PDF Export. Zero dynamic stylesheet injection.
+   and PDF Export. Supports Left, Center, and Right alignment.
    ================================================================ */
 
 /* ── Live Preview & Reading View Layout ──────────────────────── */
-.internal-embed.image-embed.ia-left,
+
+/* Left Alignment Containers */
+.markdown-source-view.mod-cm6 .cm-content .cm-embed-block.ia-left,
+.markdown-source-view.mod-cm6 .cm-content .cm-line.ia-left,
+.markdown-source-view.mod-cm6 .cm-content .internal-embed.ia-left,
+.markdown-source-view.mod-cm6 .cm-content .image-embed.ia-left,
+.markdown-rendered .internal-embed.ia-left,
+.markdown-rendered .image-embed.ia-left,
+.markdown-rendered p.ia-left,
 .internal-embed.ia-left,
 .image-embed.ia-left,
 .ia-host.ia-left {
@@ -18,7 +26,14 @@
     margin-right: auto !important;
 }
 
-.internal-embed.image-embed.ia-center,
+/* Center Alignment Containers */
+.markdown-source-view.mod-cm6 .cm-content .cm-embed-block.ia-center,
+.markdown-source-view.mod-cm6 .cm-content .cm-line.ia-center,
+.markdown-source-view.mod-cm6 .cm-content .internal-embed.ia-center,
+.markdown-source-view.mod-cm6 .cm-content .image-embed.ia-center,
+.markdown-rendered .internal-embed.ia-center,
+.markdown-rendered .image-embed.ia-center,
+.markdown-rendered p.ia-center,
 .internal-embed.ia-center,
 .image-embed.ia-center,
 .ia-host.ia-center {
@@ -30,7 +45,14 @@
     margin-right: auto !important;
 }
 
-.internal-embed.image-embed.ia-right,
+/* Right Alignment Containers */
+.markdown-source-view.mod-cm6 .cm-content .cm-embed-block.ia-right,
+.markdown-source-view.mod-cm6 .cm-content .cm-line.ia-right,
+.markdown-source-view.mod-cm6 .cm-content .internal-embed.ia-right,
+.markdown-source-view.mod-cm6 .cm-content .image-embed.ia-right,
+.markdown-rendered .internal-embed.ia-right,
+.markdown-rendered .image-embed.ia-right,
+.markdown-rendered p.ia-right,
 .internal-embed.ia-right,
 .image-embed.ia-right,
 .ia-host.ia-right {
@@ -42,30 +64,38 @@
     margin-right: 0 !important;
 }
 
-/* Image element block & margin rules */
+/* Direct img elements & nested img inside embeds */
 .ia-left img,
+.internal-embed.ia-left img,
+.image-embed.ia-left img,
 img.ia-left {
     display: block !important;
-    margin: 0 auto 0 0 !important;
+    margin-left: 0 !important;
+    margin-right: auto !important;
     max-width: 100% !important;
 }
 
 .ia-center img,
+.internal-embed.ia-center img,
+.image-embed.ia-center img,
 img.ia-center {
     display: block !important;
-    margin: 0 auto !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
     max-width: 100% !important;
 }
 
 .ia-right img,
+.internal-embed.ia-right img,
+.image-embed.ia-right img,
 img.ia-right {
     display: block !important;
-    margin: 0 0 0 auto !important;
+    margin-left: auto !important;
+    margin-right: 0 !important;
     max-width: 100% !important;
 }
 
 /* ── Floating alignment panel ───────────────────────────────── */
-/* Single shared panel in document.body with position: fixed.    */
 .ia-float-panel {
     position: fixed;
     z-index: var(--layer-popover, 9999);
@@ -150,15 +180,14 @@ img.ia-right {
    PRINT / PDF EXPORT (100% reliable print-specific layout)
    ================================================================ */
 @media print {
-    /* Hide toolbar */
     .ia-float-panel {
         display: none !important;
     }
 
-    /* Print container blocks */
     .ia-host.ia-left,
     .internal-embed.ia-left,
-    .image-embed.ia-left {
+    .image-embed.ia-left,
+    p.ia-left {
         display: block !important;
         text-align: left !important;
         width: 100% !important;
@@ -166,7 +195,8 @@ img.ia-right {
 
     .ia-host.ia-center,
     .internal-embed.ia-center,
-    .image-embed.ia-center {
+    .image-embed.ia-center,
+    p.ia-center {
         display: block !important;
         text-align: center !important;
         width: 100% !important;
@@ -174,15 +204,16 @@ img.ia-right {
 
     .ia-host.ia-right,
     .internal-embed.ia-right,
-    .image-embed.ia-right {
+    .image-embed.ia-right,
+    p.ia-right {
         display: block !important;
         text-align: right !important;
         width: 100% !important;
     }
 
-    /* Print image margins */
     .ia-left img,
     .ia-host.ia-left img,
+    .internal-embed.ia-left img,
     img.ia-left {
         display: block !important;
         margin: 0 auto 0 0 !important;
@@ -190,6 +221,7 @@ img.ia-right {
 
     .ia-center img,
     .ia-host.ia-center img,
+    .internal-embed.ia-center img,
     img.ia-center {
         display: block !important;
         margin: 0 auto !important;
@@ -197,6 +229,7 @@ img.ia-right {
 
     .ia-right img,
     .ia-host.ia-right img,
+    .internal-embed.ia-right img,
     img.ia-right {
         display: block !important;
         margin: 0 0 0 auto !important;
