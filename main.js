@@ -144,8 +144,13 @@ class ImageAlignerPlugin extends Plugin {
                         changed = true;
                     }
                 }
-            } else if (!src.startsWith('link:') && !src.startsWith('file:') && !src.startsWith('http')) {
+            } else if (!src.startsWith('link:') && !src.startsWith('file:') && !src.startsWith('http://') && !src.startsWith('https://')) {
                 newKey = 'link:' + src;
+                changed = true;
+            }
+
+            if (newKey.startsWith('link:http://') || newKey.startsWith('link:https://')) {
+                newKey = newKey.replace(/^link:/, '');
                 changed = true;
             }
 
@@ -172,8 +177,10 @@ class ImageAlignerPlugin extends Plugin {
         if (embed) {
             let src = embed.getAttribute('src');
             if (src) {
+                if (src.includes('?')) src = src.split('?')[0];
                 if (src.includes('|')) src = src.split('|')[0];
-                return 'link:' + src.trim();
+                src = src.trim();
+                return (src.startsWith('http://') || src.startsWith('https://')) ? src : ('link:' + src);
             }
         }
 
@@ -225,7 +232,8 @@ class ImageAlignerPlugin extends Plugin {
                     // Markdown links: ![alt](url)
                     const mdRegex = /!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
                     while ((match = mdRegex.exec(text)) !== null) {
-                        const rawUrl = match[1].trim().split('?')[0];
+                        let rawUrl = match[1].trim();
+                        if (rawUrl.includes('?')) rawUrl = rawUrl.split('?')[0];
                         if (rawUrl) {
                             if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
                                 keys.add(rawUrl);
@@ -341,13 +349,28 @@ img[data-path*="${safeFile}"],
                 // External web image
                 const safeKey = escapeCSS(rawPath);
                 lines.push(`
-.markdown-source-view.mod-cm6 .cm-embed-block:has(img[src="${safeKey}"]),
-.markdown-rendered p:has(img[src="${safeKey}"]) {
+.markdown-source-view.mod-cm6 .cm-embed-block:has(img[src^="${safeKey}"]),
+.markdown-source-view.mod-cm6 .cm-embed-block:has(img[src*="${safeKey}"]),
+.markdown-source-view.mod-cm6 .cm-line:has(img[src^="${safeKey}"]),
+.markdown-source-view.mod-cm6 .cm-line:has(img[src*="${safeKey}"]),
+.markdown-source-view.mod-cm6 .image-embed[src^="${safeKey}"],
+.markdown-source-view.mod-cm6 .image-embed:has(img[src^="${safeKey}"]),
+.markdown-rendered p:has(img[src^="${safeKey}"]),
+.markdown-rendered p:has(img[src*="${safeKey}"]) {
     display: flex !important;
     justify-content: ${justifyVal} !important;
     text-align: ${textAlign} !important;
 }
-img[src="${safeKey}"] {
+.image-embed[src^="${safeKey}"],
+.image-embed:has(img[src^="${safeKey}"]) {
+    display: inline-flex !important;
+    justify-content: ${justifyVal} !important;
+    margin-left: ${align === 'left' ? '0' : 'auto'} !important;
+    margin-right: ${align === 'right' ? '0' : 'auto'} !important;
+    max-width: 100% !important;
+}
+img[src^="${safeKey}"],
+img[src*="${safeKey}"] {
     display: block !important;
     margin-left: ${align === 'left' ? '0' : 'auto'} !important;
     margin-right: ${align === 'right' ? '0' : 'auto'} !important;
@@ -367,7 +390,7 @@ img[src="${safeKey}"] {
         el.querySelectorAll('img').forEach(img => {
             const key   = this._key(img);
             const align = this.data.alignments[key] || null;
-            const host  = img.closest('.internal-embed') || img.closest('p') || img.parentElement;
+            const host  = img.closest('.internal-embed') || img.closest('.image-embed') || img.closest('p') || img.parentElement;
             if (!host) return;
 
             host.classList.add('ia-host');
