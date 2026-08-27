@@ -2,69 +2,73 @@
    Image Aligner v2.2 — styles.css
 
    High-performance static CSS rules for Live Preview, Reading View,
-   and PDF Export. Supports Left, Center, and Right alignment.
+   and PDF Export. Preserves native image resizing & sizing (|300 etc.).
    ================================================================ */
 
-/* ── Live Preview & Reading View Layout ──────────────────────── */
+/* ── Live Preview & Reading View Line Containers ─────────────── */
 
-/* Left Alignment Containers */
+/* Left Alignment */
 .markdown-source-view.mod-cm6 .cm-content .cm-embed-block.ia-left,
 .markdown-source-view.mod-cm6 .cm-content .cm-line.ia-left,
-.markdown-source-view.mod-cm6 .cm-content .internal-embed.ia-left,
-.markdown-source-view.mod-cm6 .cm-content .image-embed.ia-left,
-.markdown-rendered .internal-embed.ia-left,
-.markdown-rendered .image-embed.ia-left,
 .markdown-rendered p.ia-left,
-.internal-embed.ia-left,
-.image-embed.ia-left,
 .ia-host.ia-left {
     display: flex !important;
     justify-content: flex-start !important;
     text-align: left !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: auto !important;
 }
 
-/* Center Alignment Containers */
+/* Center Alignment */
 .markdown-source-view.mod-cm6 .cm-content .cm-embed-block.ia-center,
 .markdown-source-view.mod-cm6 .cm-content .cm-line.ia-center,
-.markdown-source-view.mod-cm6 .cm-content .internal-embed.ia-center,
-.markdown-source-view.mod-cm6 .cm-content .image-embed.ia-center,
-.markdown-rendered .internal-embed.ia-center,
-.markdown-rendered .image-embed.ia-center,
 .markdown-rendered p.ia-center,
-.internal-embed.ia-center,
-.image-embed.ia-center,
 .ia-host.ia-center {
     display: flex !important;
     justify-content: center !important;
     text-align: center !important;
-    width: 100% !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
 }
 
-/* Right Alignment Containers */
+/* Right Alignment */
 .markdown-source-view.mod-cm6 .cm-content .cm-embed-block.ia-right,
 .markdown-source-view.mod-cm6 .cm-content .cm-line.ia-right,
-.markdown-source-view.mod-cm6 .cm-content .internal-embed.ia-right,
-.markdown-source-view.mod-cm6 .cm-content .image-embed.ia-right,
-.markdown-rendered .internal-embed.ia-right,
-.markdown-rendered .image-embed.ia-right,
 .markdown-rendered p.ia-right,
-.internal-embed.ia-right,
-.image-embed.ia-right,
 .ia-host.ia-right {
     display: flex !important;
     justify-content: flex-end !important;
     text-align: right !important;
-    width: 100% !important;
-    margin-left: auto !important;
-    margin-right: 0 !important;
 }
 
-/* Direct img elements & nested img inside embeds */
+/* ── Embed wrappers (Never force width: 100% so resizing works) ─ */
+.internal-embed.image-embed.ia-left,
+.internal-embed.ia-left,
+.image-embed.ia-left {
+    display: inline-flex !important;
+    justify-content: flex-start !important;
+    margin-left: 0 !important;
+    margin-right: auto !important;
+    max-width: 100% !important;
+}
+
+.internal-embed.image-embed.ia-center,
+.internal-embed.ia-center,
+.image-embed.ia-center {
+    display: inline-flex !important;
+    justify-content: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    max-width: 100% !important;
+}
+
+.internal-embed.image-embed.ia-right,
+.internal-embed.ia-right,
+.image-embed.ia-right {
+    display: inline-flex !important;
+    justify-content: flex-end !important;
+    margin-left: auto !important;
+    margin-right: 0 !important;
+    max-width: 100% !important;
+}
+
+/* ── Image elements (Preserve width attribute / style) ───────── */
 .ia-left img,
 .internal-embed.ia-left img,
 .image-embed.ia-left img,
@@ -190,7 +194,6 @@ img.ia-right {
     p.ia-left {
         display: block !important;
         text-align: left !important;
-        width: 100% !important;
     }
 
     .ia-host.ia-center,
@@ -199,7 +202,6 @@ img.ia-right {
     p.ia-center {
         display: block !important;
         text-align: center !important;
-        width: 100% !important;
     }
 
     .ia-host.ia-right,
@@ -208,7 +210,6 @@ img.ia-right {
     p.ia-right {
         display: block !important;
         text-align: right !important;
-        width: 100% !important;
     }
 
     .ia-left img,
@@ -216,7 +217,8 @@ img.ia-right {
     .internal-embed.ia-left img,
     img.ia-left {
         display: block !important;
-        margin: 0 auto 0 0 !important;
+        margin-left: 0 !important;
+        margin-right: auto !important;
     }
 
     .ia-center img,
@@ -224,7 +226,8 @@ img.ia-right {
     .internal-embed.ia-center img,
     img.ia-center {
         display: block !important;
-        margin: 0 auto !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
     }
 
     .ia-right img,
@@ -232,6 +235,7 @@ img.ia-right {
     .internal-embed.ia-right img,
     img.ia-right {
         display: block !important;
-        margin: 0 0 0 auto !important;
+        margin-left: auto !important;
+        margin-right: 0 !important;
     }
 }
