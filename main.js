@@ -106,13 +106,17 @@ function parseCaption(altText, showFileName, srcText) {
         }
     }
 
+    const lowerCaption = caption.toLowerCase();
+    if (lowerCaption === 'favicon' || lowerCaption === 'icon') {
+        return null;
+    }
+
     if (!showFileName) {
         const cleanSrcName = getCleanFileName(srcText);
         if (cleanSrcName && cleanSrcName === caption) {
             return null;
         }
 
-        const lowerCaption = caption.toLowerCase();
         if (
             lowerCaption.endsWith('.png') ||
             lowerCaption.endsWith('.jpg') ||
@@ -120,7 +124,8 @@ function parseCaption(altText, showFileName, srcText) {
             lowerCaption.endsWith('.gif') ||
             lowerCaption.endsWith('.webp') ||
             lowerCaption.endsWith('.svg') ||
-            lowerCaption.endsWith('.bmp')
+            lowerCaption.endsWith('.bmp') ||
+            lowerCaption.endsWith('.ico')
         ) {
             return null;
         }
@@ -266,9 +271,60 @@ class ImageAlignCaptionPlugin extends Plugin {
         }
     }
 
+    // ── Content Image Validator ───────────────────────────────
+    _isContentImage(img) {
+        if (!img || !(img instanceof HTMLImageElement)) return false;
+
+        // Ignore images inside third-party widgets, embeds, cards, or UI components
+        const ignoredContainers = [
+            '.link-embed',
+            '[class*="link-embed"]',
+            '[class*="card-link"]',
+            '.rich-links',
+            '[class*="rich-link"]',
+            '.dataview',
+            '[class*="dataview"]',
+            '.admonition-icon',
+            '.callout-icon',
+            '.nav-file',
+            '.workspace-leaf-header',
+            '.status-bar',
+            '.modal',
+            '.menu',
+            '.suggestion-container'
+        ].join(', ');
+
+        if (img.closest(ignoredContainers)) {
+            return false;
+        }
+
+        // Ignore images inside code block renderers that are not standard markdown images
+        const codeBlock = img.closest('[class*="block-language-"]');
+        if (codeBlock) {
+            return false;
+        }
+
+        // Ignore explicit favicon or UI icon images
+        const className = typeof img.className === 'string' ? img.className : '';
+        if (
+            className.includes('favicon') ||
+            className.includes('avatar') ||
+            className.includes('icon')
+        ) {
+            return false;
+        }
+
+        const alt = (img.getAttribute('alt') || '').trim().toLowerCase();
+        if (alt === 'favicon' || alt === 'icon') {
+            return false;
+        }
+
+        return true;
+    }
+
     // ── Stable image key ──────────────────────────────────────
     _key(img) {
-        if (!img) return '';
+        if (!img || !this._isContentImage(img)) return '';
 
         // 1. Internal Link (Wiki-link ![[...]] or Markdown embed)
         const embed = img.closest('.internal-embed') || img.closest('.image-embed');
@@ -350,8 +406,10 @@ class ImageAlignCaptionPlugin extends Plugin {
                 if (leaf.view.contentEl) {
                     const imgs = leaf.view.contentEl.querySelectorAll('img');
                     imgs.forEach(img => {
-                        const k = this._key(img);
-                        if (k) keys.add(k);
+                        if (this._isContentImage(img)) {
+                            const k = this._key(img);
+                            if (k) keys.add(k);
+                        }
                     });
                 }
             } catch (_) {}
@@ -502,12 +560,16 @@ img[src*="${safeKey}"] {
         embeds.forEach(embedEl => {
             const img = embedEl.querySelector('img');
             if (img) {
-                this._applyReadingAlignmentAndCaption(img, embedEl);
+                if (this._isContentImage(img)) {
+                    this._applyReadingAlignmentAndCaption(img, embedEl);
+                }
             } else {
                 const obs = new MutationObserver((_, observer) => {
                     const loadedImg = embedEl.querySelector('img');
                     if (loadedImg) {
-                        this._applyReadingAlignmentAndCaption(loadedImg, embedEl);
+                        if (this._isContentImage(loadedImg)) {
+                            this._applyReadingAlignmentAndCaption(loadedImg, embedEl);
+                        }
                         observer.disconnect();
                     }
                 });
@@ -519,11 +581,14 @@ img[src*="${safeKey}"] {
         const imgs = el.querySelectorAll('img');
         imgs.forEach(img => {
             if (img.closest('.internal-embed')) return;
+            if (!this._isContentImage(img)) return;
             this._applyReadingAlignmentAndCaption(img, null);
         });
     }
 
     _applyReadingAlignmentAndCaption(img, embedParent) {
+        if (!this._isContentImage(img)) return;
+
         const key = this._key(img);
         const align = this.settings.alignments[key] || null;
         const host = embedParent || img.closest('.image-embed') || img.closest('p') || img.parentElement;
@@ -592,13 +657,15 @@ img[src*="${safeKey}"] {
 
             const imgs = leaf.view.contentEl.querySelectorAll('.markdown-source-view.mod-cm6 img');
             imgs.forEach(img => {
-                this._injectLPCaption(img);
+                if (this._isContentImage(img)) {
+                    this._injectLPCaption(img);
+                }
             });
         });
     }
 
     _injectLPCaption(img) {
-        if (!img || !(img instanceof HTMLImageElement)) return;
+        if (!img || !(img instanceof HTMLImageElement) || !this._isContentImage(img)) return;
 
         const embedParent = img.closest('.image-embed') || img.closest('.internal-embed') || img.closest('.cm-embed-block');
         const key = this._key(img);
@@ -774,6 +841,8 @@ img[src*="${safeKey}"] {
         // Ensure image is inside an active Live Preview editor (source mode)
         const editorView = target.closest('.markdown-source-view.mod-cm6');
         if (!editorView) return;
+
+        if (!this._isContentImage(target)) return;
 
         this._showPanel(target);
     }
